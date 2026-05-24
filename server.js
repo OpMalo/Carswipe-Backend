@@ -11,12 +11,11 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const SCRAPER_KEY = process.env.SCRAPER_API_KEY || '';
 
-// Route all requests through ScraperAPI to bypass IP blocks
 function scrape(url) {
   if (SCRAPER_KEY) {
     return `http://api.scraperapi.com?api_key=${SCRAPER_KEY}&url=${encodeURIComponent(url)}`;
   }
-  return url; // fallback: try direct (will likely 403)
+  return url;
 }
 
 function extractPrice(text) {
@@ -57,7 +56,6 @@ function detectFuel(text) {
   return 'Gasoline';
 }
 
-// ─── KIJIJI (RSS feed via ScraperAPI) ─────────────────────────────────────────
 async function scrapeKijiji() {
   const RSS_URLS = [
     'https://www.kijiji.ca/rss-feed/cars-trucks/ville-de-montreal/c174l1700281',
@@ -100,7 +98,7 @@ async function scrapeKijiji() {
           : 'Québec';
 
         results.push({
-          id: `kijiji-${Buffer.from(link).toString('base64').slice(-10)}-${i || Date.now()}`,
+          id: `kijiji-${Buffer.from(link).toString('base64').slice(-10)}-${Date.now()}`,
           source: 'Kijiji',
           year: year || 0, make, model,
           price, mileage: 0,
@@ -125,7 +123,6 @@ async function scrapeKijiji() {
   return results;
 }
 
-// ─── AUTOHEBDO (Next.js app via ScraperAPI) ────────────────────────────────────
 async function scrapeAutoHebdo() {
   const targetUrl = 'https://www.autohebdo.net/cars/used/?prx=-1&prv=Quebec&loc=0&sts=New-Used&incs=0&wf=1';
   try {
@@ -133,7 +130,6 @@ async function scrapeAutoHebdo() {
     const resp = await axios.get(scrape(targetUrl), { timeout: 30000 });
     const $ = cheerio.load(resp.data);
 
-    // Strategy 1: __NEXT_DATA__ JSON
     const nextRaw = $('script#__NEXT_DATA__').html();
     if (nextRaw) {
       const data = JSON.parse(nextRaw);
@@ -167,7 +163,6 @@ async function scrapeAutoHebdo() {
       }
     }
 
-    // Strategy 2: scan all script tags for listing arrays
     let found = [];
     $('script').each((_, el) => {
       if (found.length > 0) return;
@@ -211,7 +206,6 @@ async function scrapeAutoHebdo() {
   }
 }
 
-// ─── CRAIGSLIST (very open RSS, rarely blocks) ─────────────────────────────────
 async function scrapeCraigslist() {
   const FEEDS = [
     { url: 'https://montreal.craigslist.org/search/cta?format=rss&purveyor=owner', city: 'Montréal, QC' },
@@ -245,7 +239,7 @@ async function scrapeCraigslist() {
 
         results.push({
           id: `cl-${Buffer.from(link).toString('base64').slice(-10)}`,
-          source: 'Kijiji', // show as Kijiji badge since we don't have Craigslist one
+          source: 'Kijiji',
           year: year || 0,
           make: words[0] || 'Unknown',
           model: words.slice(1).join(' ') || titleClean,
@@ -269,7 +263,6 @@ async function scrapeCraigslist() {
   return results;
 }
 
-// ─── Mock fallback ─────────────────────────────────────────────────────────────
 function getMockListings() {
   return [
     { id:'m1', source:'AutoHebdo', year:2021, make:'Toyota', model:'Camry XSE', price:24900, mileage:42000, transmission:'Automatic', fuel:'Gasoline', color:'Midnight Black', condition:'Used', location:'Montréal, QC', seller:'Marc T.', sellerType:'Private Seller', posted:'2 days ago', description:'Clean Carfax, all service records. Non-smoker, no accidents.', img:'https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=800&q=80', url:'https://www.autohebdo.net' },
@@ -278,7 +271,6 @@ function getMockListings() {
   ];
 }
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
 app.get('/api/listings', async (req, res) => {
   console.log(`\n=== New request (ScraperAPI: ${SCRAPER_KEY ? 'YES ✅' : 'NO ❌'}) ===`);
 
